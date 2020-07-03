@@ -2,4 +2,14 @@
 <use name="FWCore/PluginManager"/>
 <use name="FWCore/ParameterSet"/>
 <use name="DataFormats/TrackReco"/>
+<use name="DataFormats/PatCandidates"/>
+<use name="DataFormats/VertexReco"/>
+<use name="HLTrigger/HLTcore"/>
+<use name="TrackingTools/Records"/>
+<use name="TrackingTools/TransientTrack"/>
+<use name="MagneticField/Engine"/>
+<use name="MagneticField/Records"/>
+<use name="RecoVertex/KalmanVertexFit"/>
+<use name="RecoVertex/VertexTools"/>
+<use name="TrackingTools/IPTools"/>
 <flags EDM_PLUGIN="1"/>
