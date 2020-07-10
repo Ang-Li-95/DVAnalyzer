@@ -78,6 +78,7 @@ trackRefProd::trackRefProd(const edm::ParameterSet& iConfig):
   //register your products
   produces<reco::TrackRefVector>().setBranchAlias("trackRefFromCand");
   produces<reco::TrackCollection>().setBranchAlias("trackRefFromCand");
+  produces<DVAna::UnpackedCandidateTracksMap>();
   
 }
 
@@ -105,6 +106,7 @@ trackRefProd::produce(edm::Event& iEvent, const edm::EventSetup& iSetup)
 
   auto tracks_map = std::make_unique<reco::TrackRefVector>();
   auto tracks = std::make_unique<reco::TrackCollection>();
+  auto trackRef_map = std::make_unique<DVAna::UnpackedCandidateTracksMap>();
 
 
   reco::TrackRefProd h_output_tracks = iEvent.getRefBeforePut<reco::TrackCollection>();
@@ -115,12 +117,13 @@ trackRefProd::produce(edm::Event& iEvent, const edm::EventSetup& iSetup)
       const reco::Track& tk = cand.pseudoTrack();
       tracks->push_back(tk);
       tracks_map->push_back(reco::TrackRef(h_output_tracks, tracks->size()-1));
-      //tracks_map->insert(std::pair<reco::CandidatePtr, reco::TrackRef>(reco::CandidatePtr(packed_candidates, i), reco::TrackRef(h_output_tracks, tracks_map->size())));
+      trackRef_map->insert(std::pair<reco::CandidatePtr, reco::TrackRef>(reco::CandidatePtr(packed_candidates, i), reco::TrackRef(h_output_tracks, tracks_map->size())));
     }
   }
 
   iEvent.put(std::move(tracks));
   iEvent.put(std::move(tracks_map));
+  iEvent.put(std::move(trackRef_map));
 
 }
 

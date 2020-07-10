@@ -12,4 +12,5 @@
 <use name="RecoVertex/KalmanVertexFit"/>
 <use name="RecoVertex/VertexTools"/>
 <use name="TrackingTools/IPTools"/>
+<use name="LLPAnalyzer/Formats"/>
 <flags EDM_PLUGIN="1"/>

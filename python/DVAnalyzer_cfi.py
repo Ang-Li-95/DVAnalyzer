@@ -1,0 +1,14 @@
+import FWCore.ParameterSet.Config as cms
+
+DVAnalyzer = cms.EDAnalyzer('DVAnalyzer',
+                      jetTag = cms.untracked.InputTag("slimmedJets"),
+                      trackRefTag = cms.untracked.InputTag("prod"),
+                      beamspotTag = cms.untracked.InputTag("offlineBeamSpot"),
+                      #tracksTag = cms.untracked.InputTag("packedPFCandidates"),
+                      muonTag = cms.untracked.InputTag("slimmedMuons"),
+                      vertexTag = cms.untracked.InputTag("offlineSlimmedPrimaryVertices"),
+                      triggerTag = cms.untracked.InputTag("TriggerResults", "", "HLT"),
+                      processName = cms.untracked.string("HLT"),
+                      triggerNameTag = cms.untracked.string("HLT_PFHT1050_v18"),
+                      debug = cms.untracked.bool(False),
+                    )
