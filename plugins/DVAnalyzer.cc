@@ -56,6 +56,7 @@
 #include "MagneticField/Records/interface/IdealMagneticFieldRecord.h"
 #include "MagneticField/Engine/interface/MagneticField.h"
 #include "TrackingTools/IPTools/interface/IPTools.h"
+#include "LLPAnalyzer/Formats/interface/TrackRefMap.h"
 
 #include "TH1.h"
 #include "TH2.h"
@@ -124,6 +125,8 @@ class DVAnalyzer : public edm::one::EDAnalyzer<edm::one::SharedResources, edm::o
       //edm::Handle<std::vector<pat::PackedCandidate>> tracksHandle_;
       edm::EDGetTokenT<reco::TrackRefVector> trackRefToken_;
       edm::Handle<reco::TrackRefVector> trackRefHandle_;
+      edm::EDGetTokenT<DVAna::UnpackedCandidateTracksMap> trackRefMapToken_;
+      edm::Handle<DVAna::UnpackedCandidateTracksMap> trackRefMapHandle_;
       edm::EDGetTokenT<std::vector<reco::Vertex>> vtxToken_;
       edm::Handle<std::vector<reco::Vertex>> vtxHandle_;
       edm::EDGetTokenT<edm::TriggerResults> triggerResultsToken_;
@@ -179,6 +182,7 @@ DVAnalyzer::DVAnalyzer(const edm::ParameterSet& iConfig)
   muonToken_(consumes<std::vector<pat::Muon>>(iConfig.getUntrackedParameter<edm::InputTag>("muonTag"))),
   //tracksToken_(consumes<std::vector<pat::PackedCandidate>>(iConfig.getUntrackedParameter<edm::InputTag>("tracksTag"))),
   trackRefToken_(consumes<reco::TrackRefVector>(iConfig.getUntrackedParameter<edm::InputTag>("trackRefTag"))),
+  trackRefMapToken_(consumes<DVAna::UnpackedCandidateTracksMap>(iConfig.getUntrackedParameter<edm::InputTag>("trackRefMapTag"))),
   vtxToken_(consumes<std::vector<reco::Vertex>>(iConfig.getUntrackedParameter<edm::InputTag>("vertexTag"))),
   triggerResultsToken_(consumes<edm::TriggerResults>(iConfig.getUntrackedParameter<edm::InputTag>("triggerTag"))),
   processName_(iConfig.getUntrackedParameter<std::string>("processName")),
@@ -231,7 +235,11 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
   //auto tracks = *tracksHandle_.product();
 
   iEvent.getByToken(trackRefToken_, trackRefHandle_);
-  auto tRef = *trackRefHandle_.product();
+  //auto tRef = *trackRefHandle_.product();
+
+  std::vector<reco::TrackRef> tRef;
+  iEvent.getByToken(trackRefMapToken_, trackRefMapHandle_);
+  auto tRefMap = *trackRefMapHandle_.product();
 
   iEvent.getByToken(vtxToken_, vtxHandle_);
   const auto& vertex = (*vtxHandle_)[0];
@@ -259,6 +267,8 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
   // get transient track builder
   ESHandle<TransientTrackBuilder> theB;
   iSetup.get<TransientTrackRecord>().get("TransientTrackBuilder",theB);
+
+
   ESHandle<MagneticField> bFieldHandle;
   iSetup.get<IdealMagneticFieldRecord>().get(bFieldHandle);
 
@@ -310,6 +320,21 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
       if( (jet.chargedEmEnergyFraction()) > 0.8 ) continue;
       h_PFJet_cutflow_->Fill("f_EM_c>0.8",1);
     }
+
+    //get tracks from jets daughters
+    //
+    for (const reco::CandidatePtr& p : jet.daughterPtrVector()){
+      auto findMap = tRefMap.find(p);
+      if(findMap!=tRefMap.end()){
+        reco::TrackRef tk = findMap->second;
+        if(tk.isNonnull()){
+          tRef.push_back(tk);
+        }
+      }
+    }
+
+
+
     h_PFJet_PT_->Fill(jet.pt());
     h_PFJet_eta_->Fill(jet.eta());
     if(jet.pt()>=40){
@@ -683,7 +708,8 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
     for(size_t i = 0; i<ntks; ++i){
       for(size_t j = 0; j<ntks; ++j){
         if(j!=i)
-          ttks[j-(j>=i)] = TransientTrack(tks[j], &(*bFieldHandle));
+          //ttks[j-(j>=i)] = TransientTrack(tks[j], &(*bFieldHandle));
+          ttks[j-(j>=i)] = (*theB).build(tks[j]);
       }
       //std::cout << "rm" << std::endl;
       reco::Vertex v_rm_track(TransientVertex(fitter->vertex(ttks)));

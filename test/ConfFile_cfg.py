@@ -31,7 +31,8 @@ process.prod = cms.EDProducer('trackRefProd',
 
 process.load('LLPAnalyzer.DVAnalyzer.DVAnalyzer_cfi')
 process.load("TrackingTools/TransientTrack/TransientTrackBuilder_cfi")
-process.load("Configuration.Geometry.GeometryIdeal_cff")
+process.load('Configuration.StandardSequences.GeometryRecoDB_cff')
+#process.load("Configuration.Geometry.GeometryIdeal_cff")
 process.load("Configuration.StandardSequences.MagneticField_cff")
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 process.GlobalTag.globaltag = '102X_upgrade2018_realistic_v15'
