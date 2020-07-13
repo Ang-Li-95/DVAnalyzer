@@ -16,7 +16,13 @@ process.source = cms.Source("PoolSource",
                             )
 
 process.prod = cms.EDProducer('trackRefProd',
-                              packed_candidates_src = cms.InputTag('packedPFCandidates')
+                              packed_candidates_src = cms.InputTag('packedPFCandidates'),
+                              skip_weirdos = cms.bool(True)
+)
+
+process.rescale = cms.EDProducer('RescaleTracks',
+                                 trackTag = cms.InputTag('prod'),
+                                 doRescale = cms.bool(True)
 )
 
 #process.out = cms.OutputModule("PoolOutputModule",
@@ -42,10 +48,11 @@ process.GlobalTag.globaltag = '102X_upgrade2018_realistic_v15'
 #process.p = cms.Path(process.demo)
 DVAnalyzer = process.DVAnalyzer
 
-process.TFileService = cms.Service("TFileService", fileName = cms.string("DV_sig_test.root") )
+process.TFileService = cms.Service("TFileService", fileName = cms.string("DV_sig_rescale.root") )
 
 process.runseq = cms.Sequence()
 process.runseq += process.prod
+process.runseq += process.rescale
 process.runseq += DVAnalyzer
 process.path = cms.Path(process.runseq)
 process.schedule = cms.Schedule(process.path)

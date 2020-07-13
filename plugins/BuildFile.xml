@@ -1,3 +1,4 @@
+<use name="clhep"/>
 <use name="FWCore/Framework"/>
 <use name="FWCore/PluginManager"/>
 <use name="FWCore/ParameterSet"/>
@@ -13,4 +14,5 @@
 <use name="RecoVertex/VertexTools"/>
 <use name="TrackingTools/IPTools"/>
 <use name="LLPAnalyzer/Formats"/>
+<use name="LLPAnalyzer/DVAnalyzer"/>
 <flags EDM_PLUGIN="1"/>

@@ -51,6 +51,25 @@ class trackRefProd : public edm::stream::EDProducer<> {
       virtual void produce(edm::Event&, const edm::EventSetup&) override;
       virtual void endStream() override;
 
+      bool pass_cand(const pat::PackedCandidate& cand) const {
+        if (cand.charge() && cand.hasTrackDetails()) {
+          if (skip_weirdos) {
+            const reco::Track& tk = cand.pseudoTrack();
+            union U { float f; int i; } u;
+            u.f = tk.dxyError();
+            const bool weirdo =
+              u.i == 0x3b8c70c2 ||  // 0.0042859027
+              u.i == 0x3c060959 ||  // 0.0081809396
+              u.i == 0x3cd24697 ||  // 0.0256684255
+              u.i == 0x3dfc7c28 ||  // 0.1232836843
+              u.i == 0x3e948f67;    // 0.2901565731
+            if (skip_weirdos && weirdo) return false;
+          }
+          return true;
+        }
+        return false;
+      }
+
       //virtual void beginRun(edm::Run const&, edm::EventSetup const&) override;
       //virtual void endRun(edm::Run const&, edm::EventSetup const&) override;
       //virtual void beginLuminosityBlock(edm::LuminosityBlock const&, edm::EventSetup const&) override;
@@ -58,6 +77,8 @@ class trackRefProd : public edm::stream::EDProducer<> {
 
       // ----------member data ---------------------------
       const edm::EDGetTokenT<pat::PackedCandidateCollection> packed_candidates_token;
+
+      bool skip_weirdos;
 };
 
 //
@@ -73,7 +94,8 @@ class trackRefProd : public edm::stream::EDProducer<> {
 // constructors and destructor
 //
 trackRefProd::trackRefProd(const edm::ParameterSet& iConfig):
-  packed_candidates_token(consumes<pat::PackedCandidateCollection>(iConfig.getParameter<edm::InputTag>("packed_candidates_src")))
+  packed_candidates_token(consumes<pat::PackedCandidateCollection>(iConfig.getParameter<edm::InputTag>("packed_candidates_src"))),
+  skip_weirdos(iConfig.getParameter<bool>("skip_weirdos"))
 {
   //register your products
   produces<reco::TrackRefVector>().setBranchAlias("trackRefFromCand");
@@ -113,7 +135,7 @@ trackRefProd::produce(edm::Event& iEvent, const edm::EventSetup& iSetup)
 
   for (size_t i = 0; i<packed_candidates->size(); ++i){
     const pat::PackedCandidate& cand = (*packed_candidates)[i];
-    if(cand.charge() && cand.hasTrackDetails()){
+    if(pass_cand(cand)){
       const reco::Track& tk = cand.pseudoTrack();
       tracks->push_back(tk);
       tracks_map->push_back(reco::TrackRef(h_output_tracks, tracks->size()-1));

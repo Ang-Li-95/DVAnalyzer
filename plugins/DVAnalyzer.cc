@@ -57,6 +57,7 @@
 #include "MagneticField/Engine/interface/MagneticField.h"
 #include "TrackingTools/IPTools/interface/IPTools.h"
 #include "LLPAnalyzer/Formats/interface/TrackRefMap.h"
+#include "LLPAnalyzer/DVAnalyzer/interface/TrackRescaler.h"
 
 #include "TH1.h"
 #include "TH2.h"
@@ -127,6 +128,8 @@ class DVAnalyzer : public edm::one::EDAnalyzer<edm::one::SharedResources, edm::o
       edm::Handle<reco::TrackRefVector> trackRefHandle_;
       edm::EDGetTokenT<DVAna::UnpackedCandidateTracksMap> trackRefMapToken_;
       edm::Handle<DVAna::UnpackedCandidateTracksMap> trackRefMapHandle_;
+      edm::EDGetTokenT<DVAna::RescaledTrackMap> trackRescaledToken_;
+      edm::Handle<DVAna::RescaledTrackMap> trackRescaledHandle_;
       edm::EDGetTokenT<std::vector<reco::Vertex>> vtxToken_;
       edm::Handle<std::vector<reco::Vertex>> vtxHandle_;
       edm::EDGetTokenT<edm::TriggerResults> triggerResultsToken_;
@@ -183,6 +186,7 @@ DVAnalyzer::DVAnalyzer(const edm::ParameterSet& iConfig)
   //tracksToken_(consumes<std::vector<pat::PackedCandidate>>(iConfig.getUntrackedParameter<edm::InputTag>("tracksTag"))),
   trackRefToken_(consumes<reco::TrackRefVector>(iConfig.getUntrackedParameter<edm::InputTag>("trackRefTag"))),
   trackRefMapToken_(consumes<DVAna::UnpackedCandidateTracksMap>(iConfig.getUntrackedParameter<edm::InputTag>("trackRefMapTag"))),
+  trackRescaledToken_(consumes<DVAna::RescaledTrackMap>(iConfig.getUntrackedParameter<edm::InputTag>("trackRescaleMapTag"))),
   vtxToken_(consumes<std::vector<reco::Vertex>>(iConfig.getUntrackedParameter<edm::InputTag>("vertexTag"))),
   triggerResultsToken_(consumes<edm::TriggerResults>(iConfig.getUntrackedParameter<edm::InputTag>("triggerTag"))),
   processName_(iConfig.getUntrackedParameter<std::string>("processName")),
@@ -240,6 +244,9 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
   std::vector<reco::TrackRef> tRef;
   iEvent.getByToken(trackRefMapToken_, trackRefMapHandle_);
   auto tRefMap = *trackRefMapHandle_.product();
+
+  iEvent.getByToken(trackRescaledToken_, trackRescaledHandle_);
+  auto tRescaledMap = *trackRescaledHandle_.product();
 
   iEvent.getByToken(vtxToken_, vtxHandle_);
   const auto& vertex = (*vtxHandle_)[0];
@@ -328,7 +335,12 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
       if(findMap!=tRefMap.end()){
         reco::TrackRef tk = findMap->second;
         if(tk.isNonnull()){
-          tRef.push_back(tk);
+          auto tFind = tRescaledMap.find(tk);
+          if(tFind!=tRescaledMap.end()){
+            tk = tFind->second;
+            if(tk.isNonnull())
+              tRef.push_back(tk);
+          }
         }
       }
     }
