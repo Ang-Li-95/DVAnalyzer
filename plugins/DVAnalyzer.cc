@@ -58,10 +58,12 @@
 #include "TrackingTools/IPTools/interface/IPTools.h"
 #include "LLPAnalyzer/Formats/interface/TrackRefMap.h"
 #include "LLPAnalyzer/DVAnalyzer/interface/TrackRescaler.h"
+#include "LLPAnalyzer/Formats/interface/TrackAssociation.h"
 
 #include "TH1.h"
 #include "TH2.h"
 #include "TTree.h"
+#include "TVector3.h"
 
 //
 // class declaration
@@ -113,6 +115,8 @@ class DVAnalyzer : public edm::one::EDAnalyzer<edm::one::SharedResources, edm::o
       track_vec vertex_track_vec(const reco::Vertex& v) const;
       bool is_track_subset(const track_set& a, const track_set& b) const;
       void print_vtx_track(const reco::Vertex v) const;
+      track_set getJetTrack(const pat::Jet& jet, DVAna::UnpackedCandidateTracksMap& tRefMap, DVAna::RescaledTrackMap& tRescaledMap);
+      std::vector<int> jet_vtx_nTracks(const pat::Jet& jet, double track_pt_min, DVAna::TrackAssociation vtx_tk_map, DVAna::UnpackedCandidateTracksMap& tRefMap, DVAna::RescaledTrackMap& tRescaledMap);
 
 
       // ----------member data ---------------------------
@@ -132,6 +136,8 @@ class DVAnalyzer : public edm::one::EDAnalyzer<edm::one::SharedResources, edm::o
       edm::Handle<DVAna::RescaledTrackMap> trackRescaledHandle_;
       edm::EDGetTokenT<std::vector<reco::Vertex>> vtxToken_;
       edm::Handle<std::vector<reco::Vertex>> vtxHandle_;
+      edm::EDGetTokenT<DVAna::TrackAssociation> trackAssoToken_;
+      edm::Handle<DVAna::TrackAssociation> trackAssoHandle_;
       edm::EDGetTokenT<edm::TriggerResults> triggerResultsToken_;
       edm::Handle<edm::TriggerResults> triggerResultsHandle_;
 
@@ -188,6 +194,7 @@ DVAnalyzer::DVAnalyzer(const edm::ParameterSet& iConfig)
   trackRefMapToken_(consumes<DVAna::UnpackedCandidateTracksMap>(iConfig.getUntrackedParameter<edm::InputTag>("trackRefMapTag"))),
   trackRescaledToken_(consumes<DVAna::RescaledTrackMap>(iConfig.getUntrackedParameter<edm::InputTag>("trackRescaleMapTag"))),
   vtxToken_(consumes<std::vector<reco::Vertex>>(iConfig.getUntrackedParameter<edm::InputTag>("vertexTag"))),
+  trackAssoToken_(consumes<DVAna::TrackAssociation>(iConfig.getUntrackedParameter<edm::InputTag>("trackAssoTag"))),
   triggerResultsToken_(consumes<edm::TriggerResults>(iConfig.getUntrackedParameter<edm::InputTag>("triggerTag"))),
   processName_(iConfig.getUntrackedParameter<std::string>("processName")),
   triggerName_(iConfig.getUntrackedParameter<std::string>("triggerNameTag")),
@@ -239,9 +246,9 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
   //auto tracks = *tracksHandle_.product();
 
   iEvent.getByToken(trackRefToken_, trackRefHandle_);
-  //auto tRef = *trackRefHandle_.product();
+  auto tRef = *trackRefHandle_.product();
 
-  std::vector<reco::TrackRef> tRef;
+  //std::vector<reco::TrackRef> tRef;
   iEvent.getByToken(trackRefMapToken_, trackRefMapHandle_);
   auto tRefMap = *trackRefMapHandle_.product();
 
@@ -250,6 +257,9 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 
   iEvent.getByToken(vtxToken_, vtxHandle_);
   const auto& vertex = (*vtxHandle_)[0];
+
+  iEvent.getByToken(trackAssoToken_, trackAssoHandle_);
+  const DVAna::TrackAssociation& vtx_tk_map = *trackAssoHandle_.product();
 
   // load Trigger paths
   iEvent.getByToken(triggerResultsToken_, triggerResultsHandle_);
@@ -286,11 +296,35 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 
   // loop over objects in iEvent
   
+  h_Event_cutflow_->Fill("allEvents",1);
+
+  int pv = -1; // the vertex that passes the cuts and with the largest summed pT^2
+  for (size_t iv=0; iv<vtxHandle_->size(); ++iv){
+    //std::cout << "track size: " << (*vtxHandle_)[iv].tracksSize() << std::endl;
+    reco::VertexRef v(vtxHandle_, iv);
+    reco::TrackRefVector tks_vtx = vtx_tk_map[v];
+    //std::cout << "tracks from vtx: " << v.key() << " : ";
+    //for (auto tk_vtx=tks_vtx.begin(); tk_vtx!=tks_vtx.end(); ++tk_vtx){
+    //  std::cout << tk_vtx->key() << " ";
+    //}
+    //std::cout <<  std::endl;
+
+    if (!v->isFake() && v->ndof() > 4 && fabs(v->z()) <= 24 && v->position().rho() < 2) {
+      pv = iv;
+      break;
+    }
+  }
+
+  if(pv==-1)  return;
+  reco::VertexRef primary_vertex(vtxHandle_, pv);
+  //std::cout << "PV: ";
+  //print_vtx_track(*primary_vertex.get());
+
+  h_Event_cutflow_->Fill("have good PV",1);
+
   //PFJets
   double pfJet_HT = 0;
   int pfJet_N = 0;
-
-  h_Event_cutflow_->Fill("allEvents",1);
 
   for (const auto & jet:jets){
     h_PFJet_cutflow_->Fill("all jets",1);
@@ -330,6 +364,7 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 
     //get tracks from jets daughters
     //
+    /*
     for (const reco::CandidatePtr& p : jet.daughterPtrVector()){
       auto findMap = tRefMap.find(p);
       if(findMap!=tRefMap.end()){
@@ -344,8 +379,17 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
         }
       }
     }
+    */
 
 
+    int jet_vtx_idx = -1;
+    std::vector<int> jetAssociation = jet_vtx_nTracks(jet, 0.0, vtx_tk_map, tRefMap, tRescaledMap);
+    if(jetAssociation[0]!=-1)
+      jet_vtx_idx = jetAssociation[0];
+    else
+      jet_vtx_idx = jetAssociation[1];
+    //std::cout << "pv: " << pv << " jetass: " << jet_vtx_idx << std::endl;
+    if(jet_vtx_idx!=pv) continue;
 
     h_PFJet_PT_->Fill(jet.pt());
     h_PFJet_eta_->Fill(jet.eta());
@@ -381,40 +425,65 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 
   for (auto tk = tRef.begin(); tk!=tRef.end();++tk){
     auto track = *tk;
+    //calculate basic variables for tracks
+    const double pt = track->pt();
+    const double dxybs = track->dxy(bs);
+    const double dxypv = track->dxy(primary_vertex->position());
+    const double dxyerr = track->dxyError();
+    //const double rescaled_dxyerr = rs.rescaled_tk.dxyError();
+    const double sigmadxybs = dxybs / dxyerr;
+    //const double rescaled_sigmadxybs = dxybs / rescaled_dxyerr;
+    const double sigmadxypv = dxypv / dxyerr;
+    const int nhits = track->hitPattern().numberOfValidHits();
+    const int npxhits = track->hitPattern().numberOfValidPixelHits();
+    //const int nsthits = track->hitPattern().numberOfValidStripHits();
+    const int npxlayers = track->hitPattern().pixelLayersWithMeasurement();
+    const int nstlayers = track->hitPattern().stripLayersWithMeasurement();
+    int min_r = 2000000000;
+    for (int i = 1; i <= 4; ++i)
+      if (track->hitPattern().hasValidHitInPixelLayer(PixelSubdetector::PixelBarrel,i)) {
+        min_r = i;
+        break;
+      }
 
-    if( track->hitPattern().hasValidHitInPixelLayer(PixelSubdetector::PixelBarrel,1) && track->hitPattern().pixelLayersWithMeasurement()>=2 && track->hitPattern().stripLayersWithMeasurement() >= 6 && (std::abs(track->dxy())/track->dxyError()) > 4)
-      h_n_1_track_PT_->Fill(track->pt());
-    if( track->hitPattern().hasValidHitInPixelLayer(PixelSubdetector::PixelBarrel,1) && track->pt()>1 && track->hitPattern().stripLayersWithMeasurement() >= 6 && (std::abs(track->dxy())/track->dxyError()) > 4)
-      h_n_1_track_npxl_->Fill(track->hitPattern().pixelLayersWithMeasurement());
-    if( track->pt()>1 && track->hitPattern().pixelLayersWithMeasurement()>=2 && track->hitPattern().stripLayersWithMeasurement() >= 6 && (std::abs(track->dxy())/track->dxyError()) > 4)
-      h_n_1_track_nmin_->Fill(0);
-    if( track->hitPattern().hasValidHitInPixelLayer(PixelSubdetector::PixelBarrel,1) && track->hitPattern().pixelLayersWithMeasurement()>=2 && track->pt()>1 && (std::abs(track->dxy())/track->dxyError()) > 4)
-      h_n_1_track_nstl_->Fill(track->hitPattern().stripLayersWithMeasurement());
-    if( track->hitPattern().hasValidHitInPixelLayer(PixelSubdetector::PixelBarrel,1) && track->hitPattern().pixelLayersWithMeasurement()>=2 && track->pt()>1 && track->hitPattern().stripLayersWithMeasurement() >= 6)
-      h_n_1_Nsig_->Fill((std::abs(track->dxy())/track->dxyError()));
+    if(fabs(dxybs)<=0 || dxyerr>=1e9 || fabs(sigmadxypv)<=0 || nhits<0 || npxhits<0) continue;
+
+    if( min_r<=1 && npxlayers>=2 && nstlayers >= 6 && fabs(sigmadxybs) > 4)
+      h_n_1_track_PT_->Fill(pt);
+    if( min_r<=1 && pt>1 && nstlayers >= 6 && fabs(sigmadxybs) > 4)
+      h_n_1_track_npxl_->Fill(npxlayers);
+    if( pt>1 && npxlayers>=2 && nstlayers >= 6 && fabs(sigmadxybs) > 4)
+      h_n_1_track_nmin_->Fill(min_r);
+    if( min_r<=1 && pt>1 && fabs(sigmadxybs) > 4 && npxlayers>=2 )
+      h_n_1_track_nstl_->Fill(nstlayers);
+    if( min_r<=1 && npxlayers>=2 && pt>1 && nstlayers >= 6)
+      h_n_1_Nsig_->Fill(fabs(sigmadxybs));
+
+    if( min_r>1 || npxlayers<2 || nstlayers < 6 || fabs(sigmadxybs) <= 4 || pt<=1)
+      continue;
 
 
-    // track pt > 1 GeV
-    if(track->pt()<=1) continue;
-    h_Track_cutflow_->Fill("pt>1GeV", 1);
-    
-    //rmin = 1
-    if(!track->hitPattern().hasValidHitInPixelLayer(PixelSubdetector::PixelBarrel,1)) continue;
-    h_Track_cutflow_->Fill("rmin==1", 1);
+    //// track pt > 1 GeV
+    //if(track->pt()<=1) continue;
+    //h_Track_cutflow_->Fill("pt>1GeV", 1);
+    //
+    ////rmin = 1
+    //if(!track->hitPattern().hasValidHitInPixelLayer(PixelSubdetector::PixelBarrel,1)) continue;
+    //h_Track_cutflow_->Fill("rmin==1", 1);
 
-    // npxl >= 2
-    if(track->hitPattern().pixelLayersWithMeasurement()<2) continue;
-    h_Track_cutflow_->Fill("npxl>=2", 1);
+    //// npxl >= 2
+    //if(track->hitPattern().pixelLayersWithMeasurement()<2) continue;
+    //h_Track_cutflow_->Fill("npxl>=2", 1);
 
-    // nstl >= 6
-    if(track->hitPattern().stripLayersWithMeasurement() < 6) continue;
-    h_Track_cutflow_->Fill("nstl>=6", 1);
+    //// nstl >= 6
+    //if(track->hitPattern().stripLayersWithMeasurement() < 6) continue;
+    //h_Track_cutflow_->Fill("nstl>=6", 1);
 
-    // |dxy|/sigma_dxy > 4 
-    if( (std::abs(track->dxy())/track->dxyError()) <= 4 ) continue;
-    h_Track_cutflow_->Fill("dxy/sigma_dxy>4", 1);
+    //// |dxy|/sigma_dxy > 4 
+    //if( (std::abs(track->dxy())/track->dxyError()) <= 4 ) continue;
+    //h_Track_cutflow_->Fill("dxy/sigma_dxy>4", 1);
 
-    h_track_PT_->Fill(track->pt());
+    //h_track_PT_->Fill(track->pt());
 
     //reco::TransientTrack t(track, &(*bFieldHandle));
     reco::TransientTrack t = (*theB).build(track);
@@ -946,6 +1015,126 @@ void DVAnalyzer::print_vtx_track(const reco::Vertex v) const {
     std::cout << i->key() << "  ";
   }
   std::cout << std::endl;
+}
+
+track_set DVAnalyzer::getJetTrack(const pat::Jet& jet, DVAna::UnpackedCandidateTracksMap& tRefMap, DVAna::RescaledTrackMap& tRescaledMap){
+  track_set tRef;
+  for (const reco::CandidatePtr& p : jet.daughterPtrVector()){
+    auto findMap = tRefMap.find(p);
+    if(findMap!=tRefMap.end()){
+      reco::TrackRef tk = findMap->second;
+      if(tk.isNonnull()){
+        auto tFind = tRescaledMap.find(tk);
+        if(tFind!=tRescaledMap.end()){
+          tk = tFind->second;
+          if(tk.isNonnull())
+            tRef.insert(tk);
+        }
+      }
+    }
+  }
+  return tRef;
+}
+
+std::vector<int> DVAnalyzer::jet_vtx_nTracks(const pat::Jet& jet, double track_pt_min, DVAna::TrackAssociation vtx_tk_map, DVAna::UnpackedCandidateTracksMap& tRefMap, DVAna::RescaledTrackMap& tRescaledMap){
+  std::vector<int> jetAssociation(4,-1); 
+  //jet association vector:
+  // 0: association by the number of tracks from vertices
+  // 1: association by the cos angle between SV and PV
+  // 2: association by the miss distance
+  track_set jet_tracks = getJetTrack(jet, tRefMap, tRescaledMap);
+  std::set<int> jet_tracks_key;
+
+  //std::cout << "jet tracks: ";
+  for(auto tjet=jet_tracks.begin(); tjet!=jet_tracks.end(); ++tjet){
+    jet_tracks_key.insert(tjet->key());
+    //std::cout << tjet->key() << " ";
+  }
+  //std::cout << std::endl;
+
+  const reco::SecondaryVertexTagInfo* jet_tag = jet.tagInfoSecondaryVertex("secondaryVertexMaxDR6p0");
+  //const reco::SecondaryVertexTagInfo* jet_tag = jet.tagInfoSecondaryVertex();
+  const reco::Vertex* jet_tag_vtx = 0;
+  TVector3 jet_tag_vtx_pos;
+  if(jet_tag && jet_tag->nVertices() > 0){
+    jet_tag_vtx = &jet_tag->secondaryVertex(0);
+    jet_tag_vtx_pos.SetXYZ(jet_tag_vtx->x(), jet_tag_vtx->y(), jet_tag_vtx->z());
+  }
+  const TVector3 jet_mom_dir = TVector3(jet.px(), jet.py(), jet.pz()).Unit();
+  int ntracks_max = 0;
+  double cos_angle_min = 1e9;
+  Measurement1D miss_dist_min(1e9, 1);
+
+  const double max_cos_angle_diff = 2;
+  const double max_miss_dist = 1e6;
+  const double max_miss_sig = 2;
+  for (size_t ivtx=0; ivtx<vtxHandle_->size(); ++ivtx){
+
+    const double min_vertex_track_weight = 0.5;
+
+    const reco::VertexRef vtx = reco::VertexRef(vtxHandle_, ivtx);
+    //const reco::Vertex& vtx = vtxHandle_->at(ivtx);
+    if( vtx_tk_map.find(vtx) == vtx_tk_map.end() ) continue;
+    reco::TrackRefVector v_tks = vtx_tk_map[vtx];
+
+    int ntracks = 0;
+    double cos_angle = 1e9;
+    Measurement1D miss_dist(1e9, 1);
+
+    //std::cout << "vtx " << ivtx << " has tracks: ";
+    //for(auto itkp = v_tks.begin(); itkp!=v_tks.end(); ++itkp){
+    //  std::cout << itkp->key() << " ";
+    //}
+    //std::cout << std::endl;
+    //std::cout << "vtx " << ivtx << " has tracks: ";
+    for(auto itk = v_tks.begin(); itk!=v_tks.end(); ++itk){
+      //if(vtx->trackWeight(*itk)>=min_vertex_track_weight){
+      if(1){
+        //reco::TrackRef tk = (*itk)->castTo<reco::TrackRef>();
+        reco::TrackRef tk = *itk;
+        //std::cout << "ref: " << tk.key() << " pt: " << tk->pt() << " count: " << jet_tracks.count(tk) << std::endl;
+        if(jet_tracks_key.count(tk.key())>0 && tk->pt()>track_pt_min){
+          //std::cout << "Found matched track " << tk.key() << std::endl;
+          ++ntracks;
+        }
+      }
+    }
+    //std::cout << std::endl;
+    if(jet_tag_vtx){
+      const TVector3 sv_to_tv = jet_tag_vtx_pos - TVector3(vtx->x(), vtx->y(), vtx->z());
+      cos_angle = sv_to_tv.Dot(jet_mom_dir) / sv_to_tv.Mag();
+      // miss distance is magnitude of (jet direction cross (tv - sv))
+      // to calculate uncertainty, use |n X d|^2 = (|n||d|)^2 - (n . d)^2
+      const TVector3& n = jet_mom_dir;
+      const TVector3& d = sv_to_tv;
+      const double n_dot_d = n.Dot(d);
+      const TVector3 n_cross_d = n.Cross(d);
+      typedef math::VectorD<3>::type vec_t;
+      typedef math::ErrorD<3>::type mat_t;
+      vec_t jacobian(2*d.x() - 2*n_dot_d*n.x(),
+                     2*d.y() - 2*n_dot_d*n.y(),
+                     2*d.z() - 2*n_dot_d*n.z());
+      mat_t sv_to_tv_cov_matrix = vtx->covariance() + jet_tag_vtx->covariance();
+      double sigma_f2 = sqrt(ROOT::Math::Similarity(jacobian, sv_to_tv_cov_matrix));
+      double miss_dist_value = n_cross_d.Mag();
+      double miss_dist_err = sigma_f2 / 2 / miss_dist_value;
+      miss_dist = Measurement1D(miss_dist_value, miss_dist_err);
+      //std::cout << "miss_dist: " << miss_dist_value << " cos_angle: " << cos_angle << std::endl;
+    }
+    if(ntracks>=1 && ntracks>ntracks_max){
+      ntracks_max = ntracks;
+      jetAssociation[0] = ivtx;
+    }
+    if(fabs(cos_angle - 1) <= max_cos_angle_diff && fabs(cos_angle - 1) < fabs(cos_angle_min - 1)){
+      cos_angle_min = cos_angle;
+      jetAssociation[1] = ivtx;
+    }
+    if(miss_dist.value() <= max_miss_dist && miss_dist.significance() <= max_miss_sig && miss_dist.value() < miss_dist_min.value()){
+      miss_dist_min = miss_dist;
+      jetAssociation[2] = ivtx;
+    }
+  }
+  return jetAssociation;
 }
 
 

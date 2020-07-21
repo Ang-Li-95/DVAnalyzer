@@ -44,9 +44,10 @@ for ievt,evt in enumerate(chain):
     tkSize = evt.vtx_track_size[iv]
     x = evt.vtx_x[iv]
     y = evt.vtx_y[iv]
-    if(tkSize==0):
-      print("tkSize=0: {}".format(ievt))
-      print(evt.evt)
+    if(tkSize<3):
+      continue
+      #print("tkSize=0: {}".format(ievt))
+      #print(evt.evt)
     if(x*x+y*y<2.09 and dBV>0.01 and sigma_dBV<0.0025):
       histos["vtx_tkSize"].Fill(tkSize)
     if(tkSize>5 and dBV>0.01 and sigma_dBV<0.0025):

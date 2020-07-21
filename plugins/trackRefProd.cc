@@ -35,6 +35,7 @@
 #include "DataFormats/TrackReco/interface/Track.h"
 #include "DataFormats/TrackReco/interface/TrackFwd.h"
 #include "LLPAnalyzer/Formats/interface/TrackRefMap.h"
+#include "LLPAnalyzer/Formats/interface/TrackAssociation.h"
 //
 // class declaration
 //
@@ -47,6 +48,7 @@ class trackRefProd : public edm::stream::EDProducer<> {
       static void fillDescriptions(edm::ConfigurationDescriptions& descriptions);
 
    private:
+      typedef DVAna::TrackAssociation Association;
       virtual void beginStream(edm::StreamID) override;
       virtual void produce(edm::Event&, const edm::EventSetup&) override;
       virtual void endStream() override;
@@ -77,6 +79,7 @@ class trackRefProd : public edm::stream::EDProducer<> {
 
       // ----------member data ---------------------------
       const edm::EDGetTokenT<pat::PackedCandidateCollection> packed_candidates_token;
+      const edm::EDGetTokenT<reco::VertexCollection> vtx_token;
 
       bool skip_weirdos;
 };
@@ -95,13 +98,14 @@ class trackRefProd : public edm::stream::EDProducer<> {
 //
 trackRefProd::trackRefProd(const edm::ParameterSet& iConfig):
   packed_candidates_token(consumes<pat::PackedCandidateCollection>(iConfig.getParameter<edm::InputTag>("packed_candidates_src"))),
+  vtx_token(consumes<reco::VertexCollection>(iConfig.getParameter<edm::InputTag>("pvTag"))),
   skip_weirdos(iConfig.getParameter<bool>("skip_weirdos"))
 {
   //register your products
   produces<reco::TrackRefVector>().setBranchAlias("trackRefFromCand");
   produces<reco::TrackCollection>().setBranchAlias("trackRefFromCand");
   produces<DVAna::UnpackedCandidateTracksMap>();
-  
+  produces<Association>();
 }
 
 
@@ -126,9 +130,20 @@ trackRefProd::produce(edm::Event& iEvent, const edm::EventSetup& iSetup)
   edm::Handle<pat::PackedCandidateCollection> packed_candidates;
   iEvent.getByToken(packed_candidates_token, packed_candidates);
 
+  edm::Handle<reco::VertexCollection> primary_vertices;
+  iEvent.getByToken(vtx_token, primary_vertices);
+
+  std::vector<reco::VertexRef> vertices;
+  for(size_t ivtx=0; ivtx<primary_vertices->size(); ++ivtx){
+    vertices.push_back(reco::VertexRef(primary_vertices, ivtx));
+  }
+
   auto tracks_map = std::make_unique<reco::TrackRefVector>();
   auto tracks = std::make_unique<reco::TrackCollection>();
   auto trackRef_map = std::make_unique<DVAna::UnpackedCandidateTracksMap>();
+  //auto trackAsso = std::make_unique<DVAna::TrackAssociation>();
+  std::unique_ptr<Association> trackAsso;
+  trackAsso.reset(new Association(&iEvent.productGetter()));
 
 
   reco::TrackRefProd h_output_tracks = iEvent.getRefBeforePut<reco::TrackCollection>();
@@ -140,12 +155,24 @@ trackRefProd::produce(edm::Event& iEvent, const edm::EventSetup& iSetup)
       tracks->push_back(tk);
       tracks_map->push_back(reco::TrackRef(h_output_tracks, tracks->size()-1));
       trackRef_map->insert(std::pair<reco::CandidatePtr, reco::TrackRef>(reco::CandidatePtr(packed_candidates, i), reco::TrackRef(h_output_tracks, tracks_map->size())));
+      //also fill the track vertex association
+      for(size_t iv = 0; iv<primary_vertices->size(); ++iv){
+        reco::VertexRef vtxref = vertices.at(iv);
+        if(cand.fromPV(iv)>1){
+          trackAsso->insert(vtxref, reco::TrackRef(h_output_tracks, tracks->size()-1));
+          //std::cout << "trackAsso: vtx: " << vtxref.key() << 
+          //  " associated with track: " << reco::TrackRef(h_output_tracks, tracks->size()-1).key() << " with: " << cand.fromPV(iv) << std::endl;
+        }
+      }
+
+
     }
   }
 
   iEvent.put(std::move(tracks));
   iEvent.put(std::move(tracks_map));
   iEvent.put(std::move(trackRef_map));
+  iEvent.put(std::move(trackAsso));
 
 }
 
