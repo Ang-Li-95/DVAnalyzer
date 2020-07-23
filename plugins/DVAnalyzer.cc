@@ -117,6 +117,7 @@ class DVAnalyzer : public edm::one::EDAnalyzer<edm::one::SharedResources, edm::o
       void print_vtx_track(const reco::Vertex v) const;
       track_set getJetTrack(const pat::Jet& jet, DVAna::UnpackedCandidateTracksMap& tRefMap, DVAna::RescaledTrackMap& tRescaledMap);
       std::vector<int> jet_vtx_nTracks(const pat::Jet& jet, double track_pt_min, DVAna::TrackAssociation vtx_tk_map, DVAna::UnpackedCandidateTracksMap& tRefMap, DVAna::RescaledTrackMap& tRescaledMap);
+      double mag(double x, double y);
 
 
       // ----------member data ---------------------------
@@ -234,6 +235,7 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 
   iEvent.getByToken(bsToken_, bsHandle_);
   reco::BeamSpot bs = *bsHandle_.product();
+  const reco::Vertex fake_bs_vtx(bs.position(), bs.covariance3D());
   VertexState theBeam = VertexState(bs);
 
   iEvent.getByToken(jetToken_, jetHandle_);
@@ -382,14 +384,14 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
     */
 
 
-    int jet_vtx_idx = -1;
-    std::vector<int> jetAssociation = jet_vtx_nTracks(jet, 0.0, vtx_tk_map, tRefMap, tRescaledMap);
-    if(jetAssociation[0]!=-1)
-      jet_vtx_idx = jetAssociation[0];
-    else
-      jet_vtx_idx = jetAssociation[1];
-    //std::cout << "pv: " << pv << " jetass: " << jet_vtx_idx << std::endl;
-    if(jet_vtx_idx!=pv) continue;
+    //int jet_vtx_idx = -1;
+    //std::vector<int> jetAssociation = jet_vtx_nTracks(jet, 0.0, vtx_tk_map, tRefMap, tRescaledMap);
+    //if(jetAssociation[0]!=-1)
+    //  jet_vtx_idx = jetAssociation[0];
+    //else
+    //  jet_vtx_idx = jetAssociation[1];
+    ////std::cout << "pv: " << pv << " jetass: " << jet_vtx_idx << std::endl;
+    //if(jet_vtx_idx!=pv) continue;
 
     h_PFJet_PT_->Fill(jet.pt());
     h_PFJet_eta_->Fill(jet.eta());
@@ -558,16 +560,18 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
       print_vtx_track(*v[0]);
     }
     const auto& v1 = *v[0];
-    bool duplicate = false;
-    bool merge = false;
-    bool refit = false;
     track_set track[2]; //tracks in vertices
-    track_set tk_rm[2]; //tracks that are going to be removed from vertices
     track[0] = vertexTracks(v1);
     if(track[0].size()<2) {
       v[0] = v_refit.erase(v[0])-1;
       continue;
     }
+
+    bool duplicate = false;
+    bool merge = false;
+    bool refit = false;
+    track_set tk_rm[2]; //tracks that are going to be removed from vertices
+
     for(v[1]=v[0]+1; v[1]!=v_refit.end(); ++v[1]){
       const auto& v2 = *v[1];
 
@@ -626,7 +630,7 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
           std::cout << "tk " << tk.key() << " sig1: " << ip3D_1_sig << " sig2: " << ip3D_2_sig << std::endl;
         }
         if(ip3D_1_sig<1.5 && ip3D_2_sig<1.5){
-          if(v1.tracksSize()>=v2.tracksSize()){
+          if(v1.tracksSize()>v2.tracksSize()){
             rm_from_2 = true;
           }
           else{
@@ -641,7 +645,7 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
         }
         if(rm_from_1) tk_rm[0].insert(tk);
         if(rm_from_2) tk_rm[1].insert(tk);
-        //break;
+        break; // remove one track at a time
       }
       //std::cout << "tks to rm from 0: " << tk_rm[0].size() << std::endl;
       //std::cout << "tks to rm from 1: " << tk_rm[1].size() << std::endl;
@@ -665,15 +669,39 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
       for (auto tk:combinedSet){
         cT.push_back(tTracks[seed_track_ref_map[tk]]);
       }
-      auto v_new = refitVtx(cT);
-      if(v_new.size()==1 && vertexTracks(v_new[0])==combinedSet){
-        v_refit.erase(v[1]);
-        *v[0] = reco::Vertex(v_new[0]);
+
+      reco::VertexCollection new_vertices;
+      for (const TransientVertex& tv:refitVtx(cT))
+        new_vertices.push_back(reco::Vertex(tv));
+
+      if(new_vertices.size() > 1){
+        if(debug){
+          std::cout << "get 2 refitted vtx..." << std::endl; 
+        }
+        assert(new_vertices.size() == 2);
+        *v[1] = reco::Vertex(new_vertices[1]);
+        *v[0] = reco::Vertex(new_vertices[0]);
       }
-      else refit = true;
+      else if(new_vertices.size()==1 && vertexTracks(new_vertices[0])==combinedSet){
+        v_refit.erase(v[1]);
+        *v[0] = reco::Vertex(new_vertices[0]);
+      }
+      else{
+        if(debug)
+          std::cout << "merge didn't work, trying refits..." << std::endl;
+        refit = true;
+      }
+      //auto v_new = refitVtx(cT);
+      //if(v_new.size()==1 && vertexTracks(v_new[0])==combinedSet){
+      //  v_refit.erase(v[1]);
+      //  *v[0] = reco::Vertex(v_new[0]);
+      //}
+      //else refit = true;
       //std::cout << "merge done" << std::endl;
     }
     if(refit){
+      bool erase[2] = {false};
+      reco::Vertex vsave[2] = {*v[0], *v[1]};
       //std::cout << "refit" << std::endl;
       for (int i = 0; i<2; ++i){
         if(debug){
@@ -689,22 +717,40 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
           if(tk_rm[i].count(tk)==0)
             ttks.push_back(tTracks[seed_track_ref_map[tk]]);
         }
-        auto v_new = refitVtx(ttks);
-        if(v_new.size()==1){
-          *v[i] = reco::Vertex(v_new[0]);
-          if(debug){
-            std::cout << "refit: " << i << "  tks: ";
-            print_vtx_track(*v[i]);
+
+        reco::VertexCollection new_vertices;
+        for ( const TransientVertex& tv : refitVtx(ttks))
+          new_vertices.push_back(reco::Vertex(tv));
+        if(debug){
+          std::cout << "refit " << new_vertices.size() << " vertices " << std::endl;
+          for (const auto& nv: new_vertices){
+            std::cout << "vtx: ";
+            print_vtx_track(nv);
           }
         }
-        else{
-          if(debug){
-            std::cout << "refit rm: " << i << "  tks: ";
-            print_vtx_track(*v[i]);
-          }
-          v_refit.erase(v[i]);
-        }
+        if(new_vertices.size()==1)
+          *v[i] = new_vertices[0];
+        else
+          erase[i] = true;
+
+        //auto v_new = refitVtx(ttks);
+        //if(v_new.size()==1){
+        //  *v[i] = reco::Vertex(v_new[0]);
+        //  if(debug){
+        //    std::cout << "refit: " << i << "  tks: ";
+        //    print_vtx_track(*v[i]);
+        //  }
+        //}
+        //else{
+        //  if(debug){
+        //    std::cout << "refit rm: " << i << "  tks: ";
+        //    print_vtx_track(*v[i]);
+        //  }
+        //  v_refit.erase(v[i]);
+        //}
       }
+      if(erase[1]) v_refit.erase(v[1]);
+      if(erase[0]) v_refit.erase(v[0]);
       //std::cout << "refit done" << std::endl;
     }
 
@@ -717,6 +763,10 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 
   // merge vertices that are still too close
   //
+  /*
+  if(debug){
+    std::cout << "merge vtx that are still close" << std::endl;
+  }
   for (v[0] = v_refit.begin(); v[0]!=v_refit.end(); ++v[0]){
     if(debug){
       std::cout << "v1: ";
@@ -727,6 +777,7 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
       if(debug){
         std::cout << "v2: ";
         print_vtx_track(*v[1]);
+        std::cout << "dist_sig: " << vtxDistance.distance(*v[0], *v[1]).significance() << std::endl;
       }
       if(vtxDistance.distance(*v[0], *v[1]).significance()<4){
         if(debug){
@@ -760,6 +811,7 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
       }
     }
   }
+  */
 
   if(debug){
     std::cout << "revertex done " << std::endl;
@@ -839,14 +891,18 @@ DVAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
     //if( vIter->normalizedChi2()<=0 || vIter->normalizedChi2()>5) continue;
     //if(vIter->tracksSize()<5) continue;
 
-
-    Measurement1D dBV = dBVCalc.distance(*vIter, theBeam);
+    const double vtxZ = vIter->z();
+    const double bsxAtZ = bs.x(vtxZ);
+    const double bsyAtZ = bs.y(vtxZ);
+    double dBV_calc = mag(vIter->x()-bsxAtZ, vIter->y()-bsyAtZ);
+    //Measurement1D dBV = dBVCalc.distance(*vIter, theBeam);
+    Measurement1D dBV = dBVCalc.distance(*vIter, fake_bs_vtx);
     //if(dBV.value()<=0.01) continue;
     //if(dBV.error()>=0.0025) continue;
     //if(dBV.value()>2.09) continue;
     //evInfo->evt.push_back(n_evt);
     evInfo->vtx_track_size.push_back(vIter->tracksSize());
-    evInfo->vtx_dBV.push_back(dBV.value());
+    evInfo->vtx_dBV.push_back(dBV_calc);
     evInfo->vtx_sigma_dBV.push_back(dBV.error());
     evInfo->vtx_x.push_back(vIter->x());
     evInfo->vtx_y.push_back(vIter->y());
@@ -1137,6 +1193,9 @@ std::vector<int> DVAnalyzer::jet_vtx_nTracks(const pat::Jet& jet, double track_p
   return jetAssociation;
 }
 
+double DVAnalyzer::mag(double x, double y){
+  return sqrt(x*x + y*y);
+}
 
 void
 DVAnalyzer::endRun(edm::Run const& iRun, edm::EventSetup const& iSetup)

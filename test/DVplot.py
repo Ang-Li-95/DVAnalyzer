@@ -5,14 +5,15 @@ import subprocess
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--inputDir',dest='inputDir')
+parser.add_argument('--inputDir',dest='inputDir',default="")
+parser.add_argument('--inputeosDir',dest='inputeosDir',default="")
 parser.add_argument('--pattern',dest='pattern')
 parser.add_argument('--output',dest="output")
 
 args = parser.parse_args()
 
 if (args.inputDir != ""):
-  print args.inputDir
+  print (args.inputDir)
   chain=R.TChain("DVAnalyzer/tree_DV")
   files = []
   if args.inputDir[-1] != '/':
@@ -25,12 +26,29 @@ if (args.inputDir != ""):
     print ">>Adding "+file
     chain.Add(file)
 
+elif (args.inputeosDir != ""):
+  print (args.inputeosDir)
+  chain=R.TChain("DVAnalyzer/tree_DV")
+  files = []
+  if args.inputeosDir[-1] != '/':
+    args.inputeosDir += '/'
+  command = 'xrdfs root://cmseos.fnal.gov ls '+args.inputeosDir
+  paths = subprocess.check_output(command,shell=True).splitlines()
+  for path in paths:
+    print ('>> Creating list of files from : \n'+path)
+    command = 'xrdfs root://cmseos.fnal.gov ls -u '+path+"| grep '\.root' | grep "+args.pattern
+    str_files = subprocess.check_output(command,shell=True).splitlines()
+    files.extend(str_files)
+  for file in files:
+    print ">>Adding "+file
+    chain.Add(file)
+
 else:
   print('!!! no inputDir!!!')
 
 histos = {}
 
-histos["vtx_sigma_dBV"]=R.TH1F("vtx_sigma_dBV","vtx_sigma_dBV",500,0,0.05)
+histos["vtx_sigma_dBV"]=R.TH1F("vtx_sigma_dBV","vtx_sigma_dBV",100,0,0.05)
 histos["vtx_dBV"]=R.TH1F("vtx_dBV","vtx_dBV",80,0,0.4)
 histos["vtx_tkSize"]=R.TH1F("vtx_tkSize","vtx_tkSize",40,0,40)
 histos["vtx_xy"]=R.TH2F("vtx_xy","vtx_xy",80,-4,4,80,-4,4)
