@@ -52,10 +52,12 @@ histos["vtx_sigma_dBV"]=R.TH1F("vtx_sigma_dBV","vtx_sigma_dBV",100,0,0.05)
 histos["vtx_dBV"]=R.TH1F("vtx_dBV","vtx_dBV",80,0,0.4)
 histos["vtx_tkSize"]=R.TH1F("vtx_tkSize","vtx_tkSize",40,0,40)
 histos["vtx_xy"]=R.TH2F("vtx_xy","vtx_xy",80,-4,4,80,-4,4)
+histos["nvtx_per_event"]=R.TH1F("nvtx_per_event","nvtx_per_event",8,0,8);
 
 #loop over all events
 for ievt,evt in enumerate(chain):
   if(ievt%100000==0): print ('analyzing event {0}'.format(ievt))
+  nVtx = 0
   for iv in range(0,len(evt.vtx_dBV)):
     sigma_dBV = evt.vtx_sigma_dBV[iv]
     dBV = evt.vtx_dBV[iv]
@@ -68,12 +70,15 @@ for ievt,evt in enumerate(chain):
       #print(evt.evt)
     if(x*x+y*y<2.09 and dBV>0.01 and sigma_dBV<0.0025):
       histos["vtx_tkSize"].Fill(tkSize)
-    if(tkSize>5 and dBV>0.01 and sigma_dBV<0.0025):
+    if(tkSize>=5 and dBV>0.01 and sigma_dBV<0.0025):
       histos["vtx_xy"].Fill(x, y)
-    if(tkSize>5 and x*x+y*y<2.09 and sigma_dBV<0.0025):
+    if(tkSize>=5 and x*x+y*y<2.09 and sigma_dBV<0.0025):
       histos["vtx_dBV"].Fill(dBV)
-    if(tkSize>5 and x*x+y*y<2.09 and dBV>0.01):
+    if(tkSize>=5 and x*x+y*y<2.09 and dBV>0.01):
       histos["vtx_sigma_dBV"].Fill(sigma_dBV)
+    if(tkSize>=5 and x*x+y*y<2.09 and dBV>0.01 and sigma_dBV<0.0025):
+      nVtx += 1
+  histos["nvtx_per_event"].Fill(nVtx)
     #histos["vtx_sigma_dBV"].Fill(evt.vtx_sigma_dBV[iv])
     #histos["vtx_dBV"].Fill(evt.vtx_dBV[iv])
     #histos["vtx_tkSize"].Fill(evt.vtx_track_size[iv])

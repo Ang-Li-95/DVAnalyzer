@@ -24,7 +24,7 @@ process.prod = cms.EDProducer('trackRefProd',
 
 process.rescale = cms.EDProducer('RescaleTracks',
                                  trackTag = cms.InputTag('prod'),
-                                 doRescale = cms.bool(True)
+                                 doRescale = cms.bool(False)
 )
 
 #process.out = cms.OutputModule("PoolOutputModule",
