@@ -1,0 +1,9 @@
+python outputCSV.py --inputDir /uscms/home/ali/nobackup/LLP/DVAnalyzer/CMSSW_10_2_19/src/anaresults/0726_JetAsso_MiniAOD/ --pattern ggToNN_800M_1mm.root --output csvFiles/ggToNN_800M_1mm_wEvt.csv
+python outputCSV.py --inputDir /uscms/home/ali/nobackup/LLP/DVAnalyzer/CMSSW_10_2_19/src/anaresults/0726_JetAsso_MiniAOD/ --pattern QCD_HT700to1000.root --output csvFiles/QCD_HT700to1000_wEvt.csv
+python outputCSV.py --inputDir /uscms/home/ali/nobackup/LLP/DVAnalyzer/CMSSW_10_2_19/src/anaresults/0726_JetAsso_MiniAOD/ --pattern QCD_HT1000to1500.root --output csvFiles/QCD_HT1000to1500_wEvt.csv
+python outputCSV.py --inputDir /uscms/home/ali/nobackup/LLP/DVAnalyzer/CMSSW_10_2_19/src/anaresults/0726_JetAsso_MiniAOD/ --pattern QCD_HT1500to2000.root --output csvFiles/QCD_HT1500to2000_wEvt.csv
+python outputCSV.py --inputDir /uscms/home/ali/nobackup/LLP/DVAnalyzer/CMSSW_10_2_19/src/anaresults/0726_JetAsso_MiniAOD/ --pattern QCD_HT2000toInf.root --output csvFiles/QCD_HT2000toInf_wEvt.csv
+python outputCSV.py --inputDir /uscms/home/ali/nobackup/LLP/DVAnalyzer/CMSSW_10_2_19/src/anaresults/0726_JetAsso_MiniAOD/ --pattern TTJets600To800.root --output csvFiles/TTJets_HT600To800_wEvt.csv
+python outputCSV.py --inputDir /uscms/home/ali/nobackup/LLP/DVAnalyzer/CMSSW_10_2_19/src/anaresults/0726_JetAsso_MiniAOD/ --pattern TTJets800To1200.root --output csvFiles/TTJets_HT800To1200_wEvt.csv
+python outputCSV.py --inputDir /uscms/home/ali/nobackup/LLP/DVAnalyzer/CMSSW_10_2_19/src/anaresults/0726_JetAsso_MiniAOD/ --pattern TTJets1200To2500.root --output csvFiles/TTJets_HT1200To2500_wEvt.csv
+python outputCSV.py --inputDir /uscms/home/ali/nobackup/LLP/DVAnalyzer/CMSSW_10_2_19/src/anaresults/0726_JetAsso_MiniAOD/ --pattern TTJets2500ToInf.root --output csvFiles/TTJets_HT2500ToInf_wEvt.csv
